@@ -1,0 +1,393 @@
+﻿@{
+    ViewBag.Title = "Lunar Lander";
+}
+<h2>@ViewBag.Title.</h2>
+<h3>@ViewBag.Message</h3>
+
+<script type="text/javascript">
+/*
+ * Stolen from the internet as an example of Google it when trying to find a solution to a problem.
+ * 
+ *
+ *
+ *  Licence for the MoonLanderGame script:
+ * ----------------------------------------------------------------------------
+ * "THE BEER-WARE LICENSE" (Revision 42):
+ * <cbrues@gmail.com> wrote this file. As long as you retain this notice you
+ * can do whatever you want with this stuff. If we meet some day, and you think
+ * this stuff is worth it, you can buy me a beer in return. Cody Browne
+ * ----------------------------------------------------------------------------
+ */
+function MoonLanderGame() {
+
+   // Configuration
+   this.REPEAT = false; // Set to true to repeatedly simulate and take score.
+   this.INITIALYVELOCITY = null; // Set to non-null value for a constant initial velocity.
+   this.WINDVELOCITY = null; // Set to non-null value to create constant wind.
+   this.DRAWINTERVAL = 200; // ms between simulation steps.
+   this.MAXSAFELANDINGSPEED = 4.0; // Maximum speed at which a landing is a success.
+   this.MAXFUEL = 100.0 // Maximum amount of fuel.
+   this.GRAVITY = 2.0; // Acceleration due to gravity.
+
+   // Imlement the control function here.
+   this.Control = function(){
+      this.burn = 2.0;
+      this.thrust = 0;
+   }
+
+   // Constants
+   this.PADLEFT = 160;
+   this.PADRIGHT = 240;
+   this.PADHEIGHT = 5;
+   this.CRASHED = 2;
+   this.LANDED = 1;
+   this.INAIR = 0;
+   this.FUELBARWIDTH = 10;
+
+   // Game variables
+   this.xPosition = 0;
+   this.yPosition = 0;
+   this.xVelocity = 0;
+   this.yVelocity = 0;
+   this.windVelocity = 0;
+   this.fuel = 0;
+   this.burn = 0;
+   this.thrust = 0;
+
+   // Misc
+   this.wins = 0;
+   this.losses = 0;
+   this.Frame = 0;
+   this.backBuffer = null;
+   this.canvas = null;
+
+   this.getLandedState = function(){
+      if( this.p2GY( this.yPosition ) < ( this.canvas.height - this.PADHEIGHT ) ){
+         return this.INAIR;
+      }
+      else if( this.yVelocity <= this.MAXSAFELANDINGSPEED && this.isLanderAbovePad() ){
+         if( this.REPEAT ){
+            this.wins++;
+            this.Reset();
+         }
+         return this.LANDED;
+      }
+      else {
+         if( this.REPEAT ){
+            this.losses++;
+            this.Reset();
+         }
+         return this.CRASHED;
+      }
+   }
+   this.isLanderAbovePad = function(){
+      return this.p2GX( this.xPosition ) > this.PADLEFT && this.p2GX( this.xPosition ) < this.PADRIGHT;
+   }
+   this.Initialize = function(){
+
+      // Set up the back buffer.
+      this.canvas = document.getElementById( 'canvas' );
+      this.backBuffer = document.createElement( 'canvas' );
+      this.backBuffer.width = this.canvas.width;
+      this.backBuffer.height = this.canvas.height;
+
+      // Initalize variables.
+      this.Reset();
+
+      // Do first draw.
+      this.DrawInAir();
+      // Set up refresh timer.
+      var closure = this.bind( this.RunGameLoop );
+      this.GameLoop = setInterval( closure , this.DRAWINTERVAL );
+   }
+   this.Reset = function() {
+      this.frame = 0;
+      this.xPosition = 0;
+      this.yPosition = 100.0;
+      this.xVelocity = 0.0;
+      this.fuel = this.MAXFUEL;
+      this.burn = 0.0;
+      this.thrust = 0.0;
+
+      if( this.INITIALYVELOCITY == null ){
+         this.yVelocity = 10.0 * Math.random();
+      }
+      else {
+         this.yVelocity = this.INITIALYVELOCITY;
+      }
+
+      if( this.WINDVELOCITY == null ){
+         this.windVelocity = 0.2 * ( Math.random() - 0.5 );
+      }
+      else {
+         this.windVelocity = this.WINDVELOCITY;
+      }
+
+   }
+   this.RunGameLoop = function(){
+      if( this.getLandedState() == this.INAIR ){
+         // Haven't landed yet. Update physics.
+         this.Update();
+      }
+
+      switch( this.getLandedState() ){
+         case this.INAIR:
+            this.Update();
+            this.DrawInAir();
+            break;
+         case this.LANDED:
+            this.DrawLanded();
+            break;
+         case this.CRASHED:
+            this.DrawCrashed();
+            break;
+      }
+      this.Frame++;
+   }
+   this.bind = function( Method ){
+      var _this = this;
+
+      return (
+         function(){
+            return( Method.apply( _this, arguments ) );
+         }
+      );
+    }
+   this.Update = function(){
+      // This implementation of the physics is based off an implementation by T. Soule
+      // which is for a class.
+      // Do physics.
+      this.yVelocity += this.GRAVITY;
+
+      // Upate inputs.
+      this.Control();
+
+      // Update burn.
+      if( this.fuel < this.burn ){
+         this.burn = this.fuel;
+      }
+      this.fuel -= Math.abs( this.burn );
+      this.yVelocity -= this.burn;
+
+      // Update thrust.
+      if( this.fuel < this.thrust ){
+         this.thrust = this.fuel;
+      }
+      this.fuel -= Math.abs( this.thrust );
+      this.xVelocity -= this.thrust;
+
+      this.yPosition -= this.yVelocity;
+      this.xPosition += this.xVelocity + this.windVelocity;
+
+      if( this.yPosition < 0 ){
+         this.yPosition = 0;
+      }
+
+      return 0;
+
+   }
+   this.p2GX = function( x ){
+      return( ( this.canvas.width + x * this.canvas.width ) / 2 );
+   }
+   this.p2GY = function( y ){
+      return( ( 100.0 - y ) / 100.0 * this.canvas.height );
+   }
+   this.DrawLanded = function(){
+      this.DrawStart();
+
+      // Get the back buffer context.
+      var ctx = this.backBuffer.getContext( '2d' );
+
+      // Draw lander.
+      ctx.beginPath();
+      ctx.rect( this.p2GX( this.xPosition ) - 10 , this.p2GY( 0 ) - 20 - this.PADHEIGHT , 20 , 20 );
+      ctx.fillStyle = "#C0C0C0";
+      ctx.fill();
+
+      //Draw a "You landed" message.
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = "center";
+      ctx.fillText( 'You landed' , this.canvas.width / 2 , this.canvas.height / 4 );
+
+      this.DrawEnd();
+   }
+   this.DrawInAir = function(){
+      this.DrawStart();
+
+      // Get the back buffer context.
+      var ctx = this.backBuffer.getContext( '2d' );
+
+      // Draw lander.
+      ctx.beginPath();
+      ctx.rect( this.p2GX( this.xPosition ) - 10, this.p2GY( this.yPosition ) - 20 , 20 , 20 );
+      ctx.fillStyle = "#C0C0C0";
+      ctx.fill();
+
+      if( this.burn > 0 ){
+         var boosterlength = 20 + Math.random() * 10;
+         // Draw main booster.
+         ctx.beginPath();
+         ctx.rect( this.p2GX( this.xPosition ) - 5 , this.p2GY( this.yPosition ) , 10 , boosterlength );
+         ctx.fillStyle = "#FF0000";
+         ctx.fill();
+      }
+
+      if( this.thrust > 0 ){
+         var boosterlength = 10 + Math.random() * 5;
+         // Draw left thruster.
+         ctx.beginPath();
+         ctx.rect( this.p2GX( this.xPosition ) + 10 , this.p2GY( this.yPosition ) - 10 , boosterlength , 5 );
+         ctx.fillStyle = "#FF0000";
+         ctx.fill();
+      }
+
+      if( this.thrust < 0 ){
+         var boosterlength = 10 + Math.random() * 5;
+         // Draw right thruster.
+         ctx.beginPath();
+         ctx.rect( this.p2GX( this.xPosition ) - 30, this.p2GY( this.yPosition ) - 10 , boosterlength , 5 );
+         ctx.fillStyle = "#FF0000";
+         ctx.fill();
+      }
+
+      this.frame++;
+      this.DrawEnd();
+   }
+   this.DrawCrashed = function(){
+      this.DrawStart();
+
+      // Get the back buffer context.
+      var ctx = this.backBuffer.getContext( '2d' );
+
+      // Draw the flames.
+      ctx.beginPath();
+      ctx.rect( this.p2GX( this.xPosition ) - 10 , this.canvas.height - 20 - this.PADHEIGHT , 20 , 20 );
+      ctx.fillStyle = "#FF0000";
+      ctx.fill();
+
+      // Draw a game over message.
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = "center";
+      ctx.fillText( 'Game over' , this.canvas.width / 2 , this.canvas.height / 4 );
+
+      this.DrawEnd();
+   }
+   this.DrawEnd = function(){
+      // Swap buffers.
+      var ctx = this.canvas.getContext( '2d' );
+      ctx.save();
+      ctx.setTransform( 1 , 0 , 0 , 1 , 0 , 0 );
+      ctx.clearRect( 0 , 0 , this.canvas.width , this.canvas.height );
+      ctx.restore();
+      ctx.drawImage( this.backBuffer , 0 , 0 );
+
+   }
+   this.DrawStart = function(){
+
+      // Get the back buffer context.
+      var ctx = this.backBuffer.getContext( '2d' );
+
+      // Clear the canvas.
+      ctx.save();
+      ctx.setTransform( 1 , 0 , 0 , 1 , 0 , 0 );
+      ctx.clearRect( 0 , 0 , this.canvas.width , this.canvas.height );
+      ctx.restore();
+
+      // Draw landing pad.
+      ctx.beginPath();
+      ctx.rect( this.PADLEFT , this.canvas.height - this.PADHEIGHT , this.PADRIGHT - this.PADLEFT , this.PADHEIGHT );
+      ctx.fillStyle = "#00FF00";
+      ctx.fill();
+
+      // Draw indicators
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillText( 'X:' + this.xPosition , this.FUELBARWIDTH + 2 , 0 );
+      ctx.fillText( 'Y:' + this.yPosition , this.FUELBARWIDTH + 2 , 15 );
+      ctx.fillText( 'vX:' + this.xVelocity , this.FUELBARWIDTH + 2 , 30 );
+      ctx.fillText( 'vY:' + this.yVelocity , this.FUELBARWIDTH + 2 , 45 );
+      ctx.fillText( 'wV:' + this.windVelocity , this.FUELBARWIDTH + 2 , 60 );
+      ctx.fillText( 'g:' + this.GRAVITY , this.FUELBARWIDTH + 2 , 75 );
+
+      ctx.fillText( 'B:' + this.burn , this.FUELBARWIDTH + 2 , 105 );
+      ctx.fillText( 'T:' + this.thrust , this.FUELBARWIDTH + 2 , 120 );
+      ctx.fillText( 'F:' + this.frame , this.FUELBARWIDTH + 2 , 150 );
+
+      if( this.REPEAT ){
+         ctx.fillText( 'W:' + this.wins , this.FUELBARWIDTH + 2 , 165 );
+         ctx.fillText( 'L:' + this.losses , this.FUELBARWIDTH + 2 , 180 );
+      }
+
+      // Draw fuel bar.
+      ctx.beginPath();
+      ctx.rect( 0 , ( this.MAXFUEL - this.fuel ) / this.MAXFUEL * this.canvas.height , this.FUELBARWIDTH , this.canvas.height - 1 );
+      ctx.fillStyle = "#0000FF";
+      ctx.fill();
+
+   }
+}
+    </script>
+    <script type="text/javascript">
+function isCanvasSupported(){
+  var elem = document.createElement( 'canvas' );
+  return !!( elem.getContext && elem.getContext( '2d' ) );
+}
+var thegame = new MoonLanderGame();
+    </script>
+    <style type="text/css">
+        #canvas {
+            padding-left: 0;
+            padding-right: 0;
+            margin-left: auto;
+            margin-right: auto;
+            display: block;
+            border: white 1px solid;
+        }
+
+        #footer {
+            padding-left: 0;
+            padding-right: 0;
+            margin-left: auto;
+            margin-right: auto;
+            display: block;
+            //border: white 1px solid;
+        }
+
+        body {
+            background-color: black;
+        }
+
+        #main {
+            width: 600px;
+            padding-left: 0;
+            padding-right: 0;
+            margin-left: auto;
+            margin-right: auto;
+            display: block;
+            border: white 1px solid;
+        }
+    </style>
+<body>
+    <table id="main">
+        <tr>
+            <td width="100%">
+                <input type="button" onclick="thegame.Reset();" value="Reset">Reset</input>
+            </td>
+            <td width="50%">
+                <canvas id="canvas" width="400" height="700">Canvas not supported.</canvas>
+            </td>
+        </tr>
+    </table>
+    <script type="text/javascript">
+      if( isCanvasSupported() ){
+         thegame.Initialize();
+      }
+      else {
+         alert( 'Canvas element not supported.' );
+      }
+    </script>
+</body>
